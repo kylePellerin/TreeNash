@@ -52,13 +52,36 @@ def parse(file):
                 
     # Initialize Existence for proof
     for node in graph.nodes():
-        if node['num_parents'] == 0:
+        if graph.nodes[node]['num_parents'] == 0:
             continue 
         else:
             parent_states = generate_binary_combinations(graph.nodes[node]['num_parents'])
-            for states in parent_states:
-                graph.nodes[node]['matrix'][]
-    
+            children_states = generate_binary_combinations(len(get_children(node)))
+            for states in children_states:
+                for parent_state in parent_states:
+                    ones = sum(states[1:] + parent_state)
+                    if ones / len(states[1:] + parent_state) >= threshold:
+                        graph.nodes[node]['matrix'][states] = (1, None)
+                    else:
+                        graph.nodes[node]['matrix'][states] = 0
+
+        # else:
+        #     parent_states = generate_binary_combinations(graph.nodes[node]['num_parents'])
+        #     for child in get_children(node):
+        #         for states in parent_states:
+        #             ones = sum(states)
+        #             zeros = len(states) - ones
+        #             if ones / len(states) >= threshold:
+        #                 graph.nodes[child]['matrix'][states] = (1, None)
+        #             else:
+        #                 graph.nodes[child]['matrix'][states] = 0
+
+def get_children(node):
+    children = []
+    for a, b in graph.edges():
+        if a == node:
+            children.append(b)
+    return children 
 """
 nodes with num_parents 
 [
