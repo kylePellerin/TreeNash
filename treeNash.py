@@ -52,18 +52,31 @@ def parse(file):
                 
     # Initialize Existence for proof
     for node in graph.nodes():
-        if graph.nodes[node]['num_parents'] == 0:
+        print("node:", node)
+        if len(get_children(node)) == 0:
             continue 
         else:
             parent_states = generate_binary_combinations(graph.nodes[node]['num_parents'])
+            print("num_parents:", graph.nodes[node]['num_parents'])
+            print(len(get_children(node)))
             children_states = generate_binary_combinations(len(get_children(node)))
+
+            print("parent_states:", parent_states)
+            print("children_states:", children_states)
             for states in children_states:
                 for parent_state in parent_states:
+                    # Parent plays 0 
                     ones = sum(states[1:] + parent_state)
-                    if ones / len(states[1:] + parent_state) >= threshold:
-                        graph.nodes[node]['matrix'][states] = (1, None)
-                    else:
-                        graph.nodes[node]['matrix'][states] = 0
+                    print("parent_state:", parent_state, "states:", states)
+                    if ones / (len(parent_state) + states[1:]) >= threshold:
+                        graph.nodes[node]['matrix'][states] = (0, states[1:])
+
+                    # Parent plays 1
+                    ones_plus_parent = sum(states[1:] + parent_state + 1)
+                    if ones_plus_parent / (len(parent_state) + states[1:] + 1) >= threshold:
+                        graph.nodes[node]['matrix'][states] = (1, states[1:])
+
+        print("nodes: ", graph.nodes(data=True))
 
         # else:
         #     parent_states = generate_binary_combinations(graph.nodes[node]['num_parents'])
