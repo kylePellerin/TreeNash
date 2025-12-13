@@ -1,4 +1,5 @@
 import itertools
+import sys
 import networkx as nx
 
 graph = nx.Graph()
@@ -10,5 +11,9 @@ def parse(file):
     adjacency = {}
     for i, line in enumerate(lines[2:2 + number_nodes]):
         row = list(map(int, line.strip().split()))
-        adjacency[i] = row
+        adjacency[i+1] = row
     return number_nodes, threshold, adjacency
+
+
+if __name__ == "__main__":
+    print(parse(sys.argv[1]))
