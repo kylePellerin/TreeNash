@@ -12,6 +12,10 @@ def parse(file):
     for i, line in enumerate(lines[2:2 + number_nodes]):
         row = list(map(int, line.strip().split()))
         adjacency[i+1] = row
+    for key, value in adjacency.items():
+        for neighbor in value:
+            graph.add_edge(key, neighbor)
+    print(graph.edges())
     return number_nodes, threshold, adjacency
 
 
