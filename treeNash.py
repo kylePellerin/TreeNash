@@ -35,7 +35,7 @@ def parse(file):
 
     for i in range(1, number_nodes + 1):
         random_state = 1 if random() < 0.5 else 0
-        graph.add_node(i, state=random_state, matrix={})
+        graph.add_node(i, state=random_state, matrix={}, num_parents=0)
     
     for i, line in enumerate(lines[2:2 + number_nodes]):
         row = list(map(int, line.strip().split()))
@@ -46,13 +46,31 @@ def parse(file):
     print("nodes", graph.nodes(data=True))
 
     # Initialize payoff matrix for each node
+    # parent_list = [a for a, b in graph.edges()]
+    # print("parent_list", parent_list)
+    # child_list = [b for a, b in graph.edges()]
+    # print("child_list", child_list)
+
+
+    for node in graph.nodes():
+        for a, b in graph.edges():
+            if b == node:
+                graph.nodes[node]['num_parents'] += 1
+                
+            
+        
+    print("nodes with num_parents", graph.nodes(data=True))
 
 
     
+    print()
     for node in graph.nodes():
         matrix = {}
         print("node", node)
         print("neighbors", list(graph.neighbors(node)))
+
+        ## 
+        
         for neighbor in graph.neighbors(node):
             print()
             matrix[neighbor] = {
@@ -65,14 +83,14 @@ def parse(file):
 
 """
 edges [(1, 2), (1, 3), (3, 4)]
-nodes [(1, {'state': 1, 'matrix': {(0, 0): {(1, 1)}}}), 
+nodes [(1, {'state': 0, 'matrix': {(0, 0): {(1, 1)}}}), 
        (2, {'state': 1, 'matrix': {}}), 
-       (3, {'state': 1, 'matrix': {}}), 
+       (3, {'state': 0, 'matrix': {}}), 
        (4, {'state': 1, 'matrix': {}})]
 """
 
 def count_parents(node):
-    return len(list(graph.neighbors(node)))
+    pass
     
 
 
