@@ -50,10 +50,15 @@ def parse(file):
                 graph.nodes[node]['num_parents'] += 1
                 graph.nodes[node]['parents'].append(a)
                 
-            
-        
-    print("nodes with num_parents", graph.nodes(data=True))
-
+    # Initialize Existence for proof
+    for node in graph.nodes():
+        if node['num_parents'] == 0:
+            continue 
+        else:
+            parent_states = generate_binary_combinations(graph.nodes[node]['num_parents'])
+            for states in parent_states:
+                graph.nodes[node]['matrix'][]
+    
 """
 nodes with num_parents 
 [
@@ -63,36 +68,23 @@ nodes with num_parents
     (4, {'state': 0, 'matrix': {}, 'num_parents': 1, 'parents': [3]})]
 None
 """
+
+
+
+def generate_binary_combinations(n):
+    """Generate all possible combinations of 0s and 1s for n positions."""
+    combinations = []
     
-    # print()
-    # for node in graph.nodes():
-    #     matrix = {}
-    #     print("node", node)
-    #     print("neighbors", list(graph.neighbors(node)))
-
-    #     ## 
-        
-    #     for neighbor in graph.neighbors(node):
-    #         print()
-    #         matrix[neighbor] = {
-    #             (0, 0): 1,
-    #             (0, 1): 0,
-    #             (1, 0): 0,
-    #             (1, 1): 1
-    #         }
-    #     graph.nodes[node]['matrix'] = matrix
-
-"""
-edges [(1, 2), (1, 3), (3, 4)]
-nodes [(1, {'state': 0, 'matrix': {(0, 0): {(1, 1)}}}), 
-       (2, {'state': 1, 'matrix': {}}), 
-       (3, {'state': 0, 'matrix': {}}), 
-       (4, {'state': 1, 'matrix': {}})]
-"""
-
-def count_parents(node):
-    pass
+    # Generate all numbers from 0 to 2^n - 1
+    for i in range(2**n):
+        # Convert to binary and pad with zeros
+        binary_str = format(i, f'0{n}b')
+        # Convert to tuple of integers
+        combination = tuple(int(bit) for bit in binary_str)
+        combinations.append(combination)
     
+    return combinations
+
 
 
 if __name__ == "__main__":
