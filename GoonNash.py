@@ -120,70 +120,46 @@ def downstream_root(G, threshold, curr_node):
 def upstream_traversal(G, curr_node, prev_node, curr_action, prev_action):
     """
     Recursively reconstructs the full game states from the witness lists.
-    Returns a list of dictionaries (partial Nash Equilibria).
+    Returns a list of dictioanries partial Nash Equilibria.
     """
     solutions = []
-    
-    # 1. Retrieve the valid children configurations for this specific (Self, Parent) state
-    # Note: Keys in your dict are strings, so we cast actions to str
-    if prev_node is None:
-        # Root Logic: Key is just current_action
+    if prev_node is None: #if were at root don't need a previous action
         key = str(curr_action)
     else:
-        # Internal/Leaf Logic: Key is (current_action, prev_action)
         key = (str(curr_action), str(prev_action))
 
-    # If this specific configuration was pruned during downstream, return empty (invalid path)
-    if key not in G.nodes[curr_node]['dict']:
+    if key not in G.nodes[curr_node]['dict']: #if there are no children that can play the current action
         return []
-
     valid_children_tuples = G.nodes[curr_node]['dict'][key]
-
-    # 2. Get the list of children (neighbors excluding parent)
-    # CRITICAL: Must use same order as downstream pass
     children = [n for n in G.neighbors(curr_node) if n != prev_node]
 
-    # 3. Iterate through every valid configuration of children
-    for child_config in valid_children_tuples:
-        # child_config is a tuple like ('1', '0') corresponding to children
-        
-        # Start this branch's solution with the current node's action
+    for child_config in valid_children_tuples: #each tuple represents a valid configuration of children
         branch_solutions = [{curr_node: curr_action}]
-
-        # 4. For each child, get their sub-solutions and merge (Cartesian Product)
-        for i, child in enumerate(children):
+        for i, child in enumerate(children): #each child as an action
             child_action = int(child_config[i])
             
-            # Recurse: Get all valid sub-trees for this child
             child_sub_solutions = upstream_traversal(G, child, curr_node, child_action, curr_action)
-            
-            # If any child returns no valid solutions, this whole config is dead
-            if not child_sub_solutions:
+            if not child_sub_solutions: #no valid solutions for this child
                 branch_solutions = []
                 break
-            
-            # Cartesian Product: Merge current branch solutions with child's sub-solutions
-            # If we had 2 ways to solve left branch and 2 ways to solve right, we now have 4 total
             new_branch_solutions = []
-            for existing_sol in branch_solutions:
-                for child_sol in child_sub_solutions:
+
+            for existing_sol in branch_solutions: #each existing solution
+                for child_sol in child_sub_solutions: #each valid solution for the child
                     merged = existing_sol.copy()
                     merged.update(child_sol)
                     new_branch_solutions.append(merged)
             branch_solutions = new_branch_solutions
         
-        solutions.extend(branch_solutions)
+        solutions.extend(branch_solutions) #add all valid solutions for this branch
 
     return solutions
 
 def solve_nash(graph):
-    # Assuming Node 1 is Root
     root = 1
     final_equilibria = []
     
-    # Try setting Root to 0 and 1
     for root_action in [0, 1]:
-        # Pass None as prev_node for Root
         paths = upstream_traversal(graph, root, None, root_action, None)
         final_equilibria.extend(paths)
         
