@@ -128,13 +128,13 @@ def upstream_traversal(G, curr_node, prev_node, curr_action, prev_action):
     else:
         key = (str(curr_action), str(prev_action))
 
-    if key not in G.nodes[curr_node]['dict']: #if there are no children that can play the current action
+    if key not in G.nodes[curr_node]['dict']: #if there are no chlidren that can play the current action
         return []
     
     valid_children_tuples = G.nodes[curr_node]['dict'][key]
     children = [n for n in G.neighbors(curr_node) if n != prev_node]
 
-    for child_config in valid_children_tuples: #each tuple represents a valid configuration of children
+    for child_config in valid_children_tuples: #tupels represents a valid configuration of children
         branch_solutions = [{curr_node: curr_action}]
 
         for i, child in enumerate(children): #each child as an action
@@ -144,6 +144,7 @@ def upstream_traversal(G, curr_node, prev_node, curr_action, prev_action):
             if not child_sub_solutions: #no valid solutions for this child
                 branch_solutions = []
                 break
+
             new_branch_solutions = []
 
             for existing_sol in branch_solutions: #each existing solution
@@ -154,7 +155,7 @@ def upstream_traversal(G, curr_node, prev_node, curr_action, prev_action):
                     new_branch_solutions.append(merged)
             branch_solutions = new_branch_solutions
         
-        solutions.extend(branch_solutions) #add all valid solutions for this branch
+        solutions.extend(branch_solutions) #add all valid solutiosn for this branch
 
     return solutions
 
@@ -168,8 +169,8 @@ def solve_nash(graph):
         
     return final_equilibria
 
-def main():
-    graph, threshold = parse('second_test.txt')
+def main(file):
+    graph, threshold = parse(file)
     print(list(graph.neighbors(1)))
     root = 1
     downstream_root(graph, threshold, root)
@@ -180,6 +181,8 @@ def main():
     print(f"Found {len(equilibria)} Nash Equilibria:")
     for i, eq in enumerate(equilibria):
         print(f"Eq {i+1}: {dict(sorted(eq.items()))}")
-main()
+
+if __name__ == "__main__":
+    main(sys.argv[1])
 
 
