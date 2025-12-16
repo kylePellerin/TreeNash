@@ -189,16 +189,8 @@ def solve_nash(graph):
         
     return final_equilibria
 
-
-    
-
-    
-
-
-    
-
 def main():
-    graph, threshold = parse('input_test.txt')
+    graph, threshold = parse('second_test.txt')
     print(list(graph.neighbors(1)))
     root = 1
     downstream_root(graph, threshold, root)
