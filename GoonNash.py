@@ -176,7 +176,6 @@ def main():
     for node in graph:
         print(node)
         print(graph.nodes[node]['dict'])
-    print("\n--- Calculating Global Equilibria ---")
     equilibria = solve_nash(graph)
     print(f"Found {len(equilibria)} Nash Equilibria:")
     for i, eq in enumerate(equilibria):
