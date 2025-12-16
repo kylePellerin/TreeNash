@@ -130,21 +130,24 @@ def upstream_traversal(G, curr_node, prev_node, curr_action, prev_action):
 
     if key not in G.nodes[curr_node]['dict']: #if there are no children that can play the current action
         return []
+    
     valid_children_tuples = G.nodes[curr_node]['dict'][key]
     children = [n for n in G.neighbors(curr_node) if n != prev_node]
 
     for child_config in valid_children_tuples: #each tuple represents a valid configuration of children
         branch_solutions = [{curr_node: curr_action}]
+
         for i, child in enumerate(children): #each child as an action
             child_action = int(child_config[i])
-            
             child_sub_solutions = upstream_traversal(G, child, curr_node, child_action, curr_action)
+            
             if not child_sub_solutions: #no valid solutions for this child
                 branch_solutions = []
                 break
             new_branch_solutions = []
 
             for existing_sol in branch_solutions: #each existing solution
+                
                 for child_sol in child_sub_solutions: #each valid solution for the child
                     merged = existing_sol.copy()
                     merged.update(child_sol)
