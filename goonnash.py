@@ -1,30 +1,68 @@
 import sys
 import networkx as nx
 
-def parse(file):
-    graph = nx.Graph()
-    with open(file, 'r') as f:
-        lines = f.readlines()
-    number_nodes = int(lines[0].strip())
-    threshold_fraction = float(lines[1].strip())
+# ---------------------------------------------------------
+# 1. PROFESSOR'S PARSER (Global Variables)
+# ---------------------------------------------------------
+n = 0
+matrix = [] # Renamed from 'graph' to avoid conflict with nx.Graph
+b = []
+
+def get_input(graph_file_name):
+    global n, matrix, b
     
-    adjacency = {}
-    for i, line in enumerate(lines[2:2 + number_nodes]):
-        row = list(map(int, line.strip().split()))
-        adjacency[i+1] = row
-    for key, value in adjacency.items():
-        for neighbor in value:
-            graph.add_edge(key, neighbor)
+    with open(graph_file_name, "r") as f:
+        data = f.read().split()
+        data_index = 0
+        
+        # Read number of nodes
+        n = int(float(data[data_index])) # Handle "7" or "7.0"
+        data_index += 1
+        
+        # Initialize
+        matrix = [[0.0 for _ in range(n)] for _ in range(n)]
+        b = [0.0 for _ in range(n)]
+        
+        # Read matrix and thresholds
+        for i in range(n):
+            for j in range(n):
+                matrix[i][j] = float(data[data_index])
+                data_index += 1
             
-    # Save threshold info in the graph object
-    graph.graph['threshold_fraction'] = threshold_fraction
-    return graph, threshold_fraction
+            b[i] = float(data[data_index])
+            data_index += 1
+
+def convert_to_networkx():
+    """
+    Converts the Professor's Matrix/Globals into the NetworkX tree 
+    our algorithm expects.
+    """
+    global n, matrix, b
+    G = nx.Graph()
+    
+    # 1. Add Nodes with their specific Thresholds (b)
+    for i in range(n):
+        # User 1-based indexing for logic, Professor uses 0-based in file
+        node_id = i + 1 
+        G.add_node(node_id)
+        G.nodes[node_id]['threshold'] = b[i]
+        G.nodes[node_id]['dict'] = {} # Initialize witness dict
+
+    # 2. Add Edges from Matrix
+    # We assume the matrix represents a tree structure.
+    for i in range(n):
+        for j in range(i + 1, n): # Only check upper triangle to avoid duplicates
+            # If there is a non-zero weight, an edge exists
+            if matrix[i][j] != 0 or matrix[j][i] != 0:
+                G.add_edge(i + 1, j + 1)
+                
+    return G
+
+# ---------------------------------------------------------
+# 2. OPTIMIZED TREENASH (Updated for explicit 'b' thresholds)
+# ---------------------------------------------------------
 
 def downstream_efficient(G, curr_node, prev_node):
-    """
-    Optimized Downstream: Categorizes children instead of enumerating combinations.
-    """
-    # 1. Recurse first (Process children bottom-up)
     neighbors = list(G.neighbors(curr_node))
     if prev_node is not None:
         neighbors.remove(prev_node)
@@ -32,30 +70,23 @@ def downstream_efficient(G, curr_node, prev_node):
     for neighbor in neighbors:
         downstream_efficient(G, neighbor, curr_node)
 
-    # 2. Build the Validity Dictionary for Current Node
-    # Key: (MyAction, ParentAction) -> Value: Metadata to reconstruct children later
     node_dict = {}
     
-    threshold_fraction = G.graph['threshold_fraction']
-    degree = len(list(G.neighbors(curr_node)))
+    # --- UPDATED: Retrieve explicit threshold 'b' for this node ---
+    required_1s = G.nodes[curr_node]['threshold']
     
-    # Possible actions for Me (curr) and Parent (prev)
     my_actions = [0, 1]
     parent_actions = [0, 1] if prev_node is not None else [None]
 
     for my_action in my_actions:
         for parent_action in parent_actions:
             
-            # --- STEP A: Categorize Children ---
-            # We need to see what my children *can* do if I play 'my_action'
-            
             must_play_1 = []
             must_play_0 = []
-            flexible = []   # Can play 0 OR 1
+            flexible = []
             impossible = False
             
             for child in neighbors:
-                # Check child's witness list for the key (ChildAction, MyAction)
                 child_can_play_0 = (0, my_action) in G.nodes[child]['dict']
                 child_can_play_1 = (1, my_action) in G.nodes[child]['dict']
                 
@@ -67,90 +98,59 @@ def downstream_efficient(G, curr_node, prev_node):
                     must_play_0.append(child)
                 else:
                     impossible = True
-                    break # This config is dead
+                    break
             
             if impossible:
                 continue
 
-            # --- STEP B: Calculate Possible Sums of Neighbors ---
-            # Base 1s from Parent (if parent plays 1)
+            # Calculate Neighbors Sum
             parent_contribution = 1 if parent_action == 1 else 0
             
-            # Base 1s from Children who MUST play 1
-            children_min_1s = len(must_play_1)
-            
-            # Max possible 1s (add the flexible children)
-            children_max_1s = len(must_play_1) + len(flexible)
-            
-            # Total Neighbors playing 1 range:
-            total_min = children_min_1s + parent_contribution
-            total_max = children_max_1s + parent_contribution
-            
-            # --- STEP C: Check Threshold Constraint ---
-            # To play 'my_action', does the neighbor count support it?
-            
-            # My Threshold Requirement
-            required_1s = degree * threshold_fraction
+            # Note: This logic assumes Unweighted Neighbor Influence (Count)
+            # If the professor wants WEIGHTED influence, 'len' must be replaced by 'sum of weights'
+            total_min = len(must_play_1) + parent_contribution
+            total_max = len(must_play_1) + len(flexible) + parent_contribution
             
             valid = False
             
-            # If I play 0: I need neighbor_sum < required
-            # So, is it possible to pick flexible children such that sum < required?
-            # Yes, if the MINIMUM possible sum is < required.
+            # Check Explicit Threshold 'b'
             if my_action == 0:
                 if total_min < required_1s:
                     valid = True
-                    
-            # If I play 1: I need neighbor_sum >= required
-            # So, is it possible to pick flexible children such that sum >= required?
-            # Yes, if the MAXIMUM possible sum is >= required.
             if my_action == 1:
                 if total_max >= required_1s:
                     valid = True
             
-            # --- STEP D: Store Result ---
             if valid:
                 key = (my_action, parent_action) if prev_node is not None else (my_action)
-                # We store the lists so Upstream can easily pick who plays what
                 G.nodes[curr_node]['dict'][key] = {
                     'must_1': must_play_1,
                     'must_0': must_play_0,
                     'flexible': flexible
                 }
 
-    return
-
 def upstream_efficient(G, curr_node, prev_node, curr_action, prev_action):
-    """
-    Optimized Upstream: Greedily assigns children to meet threshold.
-    """
     solutions = []
     
-    # 1. Retrieve the constraint data stored in Downstream
     key = (curr_action, prev_action) if prev_node is not None else (curr_action)
     
     if key not in G.nodes[curr_node]['dict']:
-        return [] # Dead path
+        return []
         
     data = G.nodes[curr_node]['dict'][key]
     must_1 = data['must_1']
     must_0 = data['must_0']
     flexible = data['flexible']
     
-    # 2. Determine how many Flexible children need to become 1s
-    threshold_fraction = G.graph['threshold_fraction']
-    degree = len(list(G.neighbors(curr_node)))
-    required_1s = degree * threshold_fraction
+    # --- UPDATED: Use explicit threshold 'b' ---
+    required_1s = G.nodes[curr_node]['threshold']
     
     parent_contribution = 1 if prev_action == 1 else 0
     current_fixed_1s = len(must_1) + parent_contribution
     
-    # We need to decide which flexible children play 1 and which play 0
-    # We generate valid counts of flexible children to convert to 1
-    
     valid_flexible_counts = []
     
-    # Iterate through possible numbers of flexible children to flip to 1 (0 to all)
+    # Determine valid number of flexible children to set to 1
     for k in range(len(flexible) + 1):
         total_score = current_fixed_1s + k
         
@@ -159,41 +159,21 @@ def upstream_efficient(G, curr_node, prev_node, curr_action, prev_action):
         elif curr_action == 1 and total_score >= required_1s:
             valid_flexible_counts.append(k)
             
-    # 3. Recurse
-    # For simplicity, we assume we just pick the FIRST valid configuration of flexible children
-    # (Since all flexible children are identical in weight, we don't need to try every permutation 
-    # of WHO is flexible, just how many. However, to return ALL Nash Eq, we technically should permute.)
-    
-    # NOTE: To keep output size manageable and logic linear, we will just take 
-    # ALL combinations of flexible counts.
-    
     for k in valid_flexible_counts:
-        # Pick first k flexible children to be 1, rest 0
-        # (For a true COMPLETE enumeration, you'd use itertools.combinations here, 
-        # but that brings back exponential complexity. We'll stick to a canonical assignment 
-        # to prove existence, or you can uncomment the combination logic below.)
-        
-        # Canonical assignment (Simple Version):
         children_playing_1 = must_1 + flexible[:k]
         children_playing_0 = must_0 + flexible[k:]
         
-        # Build solution for this node
         current_branch_sols = [{curr_node: curr_action}]
-        
-        # Resolve Children
         all_children = children_playing_1 + children_playing_0
         all_actions = [1]*len(children_playing_1) + [0]*len(children_playing_0)
         
         valid_branch = True
-        
         for child, action in zip(all_children, all_actions):
             child_sols = upstream_efficient(G, child, curr_node, action, curr_action)
-            
             if not child_sols:
                 valid_branch = False
                 break
-                
-            # Cartesian Product Merge
+            
             new_sols = []
             for existing in current_branch_sols:
                 for cs in child_sols:
@@ -208,37 +188,61 @@ def upstream_efficient(G, curr_node, prev_node, curr_action, prev_action):
     return solutions
 
 # ---------------------------------------------------------
-# HELPERS (Same as before)
+# 3. POTENTIAL FUNCTION (Using Professor's Matrix)
 # ---------------------------------------------------------
-def calculate_potential_prop_4_3(equilibrium, graph, threshold_fraction, rho=1):
-    delta = 1 
+
+def calculate_potential_professor(equilibrium, G):
+    """
+    Calculates Prop 4.3 Potential using the globals 'matrix' and 'b'.
+    """
+    global matrix, b, n
+    rho = 1
     sum_delta_x = 0
     sum_b_delta_x = 0
-    for node, action_01 in equilibrium.items():
-        x_i = 1 if action_01 == 1 else -1
-        degree = graph.degree[node]
-        b_i = degree * threshold_fraction
-        sum_delta_x += (delta * x_i)
-        sum_b_delta_x += (b_i * delta * x_i)
-    term_1 = sum_delta_x ** 2
-    term_2 = 2 * sum_b_delta_x
-    return rho * (term_1 - term_2)
+    
+    # Map equilibrium {node_id: action} to list [-1, 1]
+    # CAREFUL: equilibrium uses 1-based IDs, matrix uses 0-based index
+    x_vector = [0] * n
+    for node_id, action in equilibrium.items():
+        val = 1 if action == 1 else -1
+        x_vector[node_id - 1] = val
+
+    # Calculate Deltas (Avg outgoing weight)
+    deltas = []
+    for i in range(n):
+        row_weights = [matrix[j][i] for j in range(n) if i != j]
+        avg_w = sum(row_weights) / len(row_weights) if row_weights else 1
+        deltas.append(avg_w)
+
+    for i in range(n):
+        # Term 1: delta_i * x_i
+        sum_delta_x += deltas[i] * x_vector[i]
+        
+        # Term 2: b_i * delta_i * x_i
+        sum_b_delta_x += b[i] * deltas[i] * x_vector[i]
+
+    phi = rho * ( (sum_delta_x ** 2) - (2 * sum_b_delta_x) )
+    return phi
+
+# ---------------------------------------------------------
+# MAIN
+# ---------------------------------------------------------
 
 def main(file):
-    graph, threshold = parse(file)
-    print(f"Graph loaded. Threshold: {threshold}")
+    # 1. Use Professor's Parser
+    print(f"Reading {file} using Professor's format...")
+    get_input(file)
     
-    # Initialize dicts
-    for n in graph.nodes():
-        graph.nodes[n]['dict'] = {}
-
-    root = 1
+    # 2. Convert to NetworkX for the TreeNash Logic
+    graph = convert_to_networkx()
+    print(f"Converted to Tree. Nodes: {len(graph.nodes())}, Edges: {len(graph.edges())}")
     
-    # Optimized Downstream
+    # 3. Run TreeNash
+    root = 1 # Assuming node 1 is always the root in this logic
+    
     print("Running Optimized Downstream...")
     downstream_efficient(graph, root, None)
     
-    # Optimized Upstream
     print("Running Optimized Upstream...")
     final_equilibria = []
     for root_action in [0, 1]:
@@ -247,24 +251,24 @@ def main(file):
         
     print(f"\nFound {len(final_equilibria)} Nash Equilibria.")
     
-    # Potential Analysis
+    # 4. Calculate Potentials
     best_eq_index = -1
     max_potential = -float('inf')
+
     for i, eq in enumerate(final_equilibria):
-        phi = calculate_potential_prop_4_3(eq, graph, threshold)
+        phi = calculate_potential_professor(eq, graph)
         if phi > max_potential:
             max_potential = phi
             best_eq_index = i + 1
-        # Optional: Print every single one
-        # print(f"Eq {i+1}: {phi:.2f} -> {dict(sorted(eq.items()))}")
-            
+
     if best_eq_index != -1:
-        print(f"Most Stable (Eq {best_eq_index}): Potential {max_potential:.2f}")
+        print(f"Most Stable (Eq {best_eq_index}): Potential {max_potential:.4f}")
+        # Print sorted by Node ID
         print(dict(sorted(final_equilibria[best_eq_index-1].items())))
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         main(sys.argv[1])
     else:
-        # Default behavior if no file provided
-        print("Please provide an input file.")
+        # Default for testing
+        print("Please provide a file generated by your professor's script.")
