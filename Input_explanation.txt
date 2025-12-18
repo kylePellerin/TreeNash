@@ -1,0 +1,6 @@
+4 #number of nodes in the tree
+0.5 #threhold value
+2 3 #first node connections to other nodes
+1 #second nodes connections to others etc. 
+1 4
+3
