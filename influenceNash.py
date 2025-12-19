@@ -28,7 +28,7 @@ def get_input(graph_file_name):
             b[i] = float(data[data_index])
             data_index += 1
 
-def convert_to_networkx():
+def convert_to_networkx(): #have oto
     global n, matrix, b
     G = nx.Graph()
     
@@ -48,7 +48,7 @@ def convert_to_networkx():
                 
     return G
 
-def downstream(G, curr_node, prev_node):
+def downstream(G, curr_node, prev_node): #changed from treenash because we needed to check thresholds for conformance
     node_dict = {}
     neighbors = list(G.neighbors(curr_node))
     
@@ -100,7 +100,7 @@ def downstream(G, curr_node, prev_node):
     
     G.nodes[curr_node]['dict'] = node_dict
 
-def downstream_root(G, curr_node):
+def downstream_root(G, curr_node): #downstream changes because of thresholds, need to check conformance
     node_dict = {}
     neighbors = list(G.neighbors(curr_node))
     node_threshold = G.nodes[curr_node]['threshold']
@@ -144,7 +144,7 @@ def downstream_root(G, curr_node):
 
     G.nodes[curr_node]['dict'] = node_dict
 
-def upstream_traversal(G, curr_node, prev_node, curr_action, prev_action):
+def upstream_traversal(G, curr_node, prev_node, curr_action, prev_action): #same thing as regualr tree nash because we know thresholds are already enforced
     """
     Recursively reconstructs the full game states from the witness lists.
     Returns a list of dictioanries partial Nash Equilibria.
@@ -186,7 +186,7 @@ def upstream_traversal(G, curr_node, prev_node, curr_action, prev_action):
 
     return solutions
 
-def solve_nash(graph):
+def solve_nash(graph): #solve for nash eq
     root = 1
     final_equilibria = []
     
