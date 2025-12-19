@@ -1,161 +1,226 @@
-import itertools
 import sys
 import networkx as nx
 
-def parse(file):
-    graph = nx.Graph()
-    with open(file, 'r') as f:
-        lines = f.readlines()
-    number_nodes = int(lines[0].strip())
-    threshold = float(lines[1].strip()) #fraction of neighbors to play one to keep one
-    adjacency = {}
-    for i, line in enumerate(lines[2:2 + number_nodes]):
-        row = list(map(int, line.strip().split()))
-        adjacency[i+1] = row
-    for key, value in adjacency.items():
-        for neighbor in value:
-            graph.add_edge(key, neighbor)
-    print(graph.edges())
-    print(graph.nodes())
-    return graph, threshold
+# ---------------------------------------------------------
+# 1. PROFESSOR'S PARSER (Global Variables)
+# ---------------------------------------------------------
+n = 0
+matrix = [] # Renamed from 'graph' to avoid conflict with nx.Graph
+b = []
 
-def downstream(G, threshold, curr_node, prev_node):
-    """
-    Recursively perform the downsteam pass of TreeNash, assuming that this node is not the root.
-    Add the dictionary of possible values as an attribute of the node in the graph.
-    """
+def get_input(graph_file_name):
+    global n, matrix, b
     
+    with open(graph_file_name, "r") as f:
+        data = f.read().split()
+        data_index = 0
+        
+        # Read number of nodes
+        # Use int(float(...)) to handle "7.0" vs "7"
+        n = int(float(data[data_index])) 
+        data_index += 1
+        
+        # Initialize arrays
+        matrix = [[0.0 for _ in range(n)] for _ in range(n)]
+        b = [0.0 for _ in range(n)]
+        
+        # Read influence weights and node thresholds
+        for i in range(n):
+            for j in range(n):
+                # Read the influence weight from i to j
+                matrix[i][j] = float(data[data_index])
+                data_index += 1
+            
+            # Read i's threshold
+            b[i] = float(data[data_index])
+            data_index += 1
+
+def convert_to_networkx():
+    """
+    Converts the Professor's Matrix/Globals into the NetworkX tree.
+    """
+    global n, matrix, b
+    G = nx.Graph()
+    
+    # 1. Add Nodes with their specific Thresholds (b)
+    for i in range(n):
+        node_id = i + 1  # Using 1-based indexing for your logic
+        G.add_node(node_id)
+        G.nodes[node_id]['threshold'] = b[i]
+        G.nodes[node_id]['dict'] = {} 
+
+    # 2. Add Edges from Matrix
+    # We assume the matrix represents a tree structure.
+    # Note: LIGs are directed by nature (influence), but your tree logic assumes undirected connectivity.
+    # We will store the INCOMING weights (influence neighbor -> me) on the edges.
+    for i in range(n):
+        for j in range(i + 1, n): 
+            # If there is a connection
+            if matrix[i][j] != 0 or matrix[j][i] != 0:
+                u, v = i + 1, j + 1
+                G.add_edge(u, v)
+                
+    return G
+
+# ---------------------------------------------------------
+# 2. ORIGINAL LOGIC (Adapted for Weights)
+# ---------------------------------------------------------
+
+def downstream(G, curr_node, prev_node):
+    """
+    Recursively perform the downstream pass.
+    Updated to calculate WEIGHTED sum against explicit node threshold.
+    """
     node_dict = {}
     neighbors = list(G.neighbors(curr_node))
-    node_threshold = threshold * len(neighbors)
-    # Don't recurse on the node we've already seen
-    neighbors.remove(prev_node)
+    
+    # Don't recurse on the parent
+    if prev_node in neighbors:
+        neighbors.remove(prev_node)
 
     for neighbor in neighbors:
-        # Recurse on all unseen neighbors
-        downstream(G, threshold, neighbor, curr_node)
+        downstream(G, neighbor, curr_node)
 
+    # Retrieve explicit threshold for this specific node
+    node_threshold = G.nodes[curr_node]['threshold']
+
+    # Iterate through all binary combinations of (Children + Parent + Self)
+    # Binary string length = len(children) + 1 (parent) + 1 (self) = len(neighbors) + 2
     for i in range(2**(len(neighbors)+2)):
-        # Try all possible assignments for the node and all its neighbors, given by a binary string
-        # Where each digit corresponds to a node's assignment
         binary = f"{i:0{len(neighbors)+2}b}"
         working_values = True
-        digit_sum = 0
-
-        # Ignore the assignment if the current node isn't playing its best response.
-        for digit in binary[:-1]:
-            digit_sum += int(digit)
-        if digit_sum >= node_threshold and binary[-1] == '0':
-            working_values = False
-        if digit_sum < node_threshold and binary[-1] == '1':
-            working_values = False
         
-        # The previous string's assignment is the second to last in the string
-        prev_value = binary[-2]
-        # The current string's assignment is the last in the string
+        # --- NEW LOGIC: Calculate Weighted Influence ---
+        current_influence = 0.0
+        
+        # 1. Add influence from Children (bits 0 to len-1)
+        # binary[j] corresponds to neighbors[j]
+        for j, child in enumerate(neighbors):
+            if binary[j] == '1':
+                # Influence FROM child TO curr_node
+                # Convert 1-based IDs to 0-based matrix index
+                weight = matrix[child-1][curr_node-1]
+                current_influence += weight
+
+        # 2. Add influence from Parent (bit -2)
+        parent_val = binary[-2]
+        if parent_val == '1':
+            # Influence FROM parent TO curr_node
+            weight = matrix[prev_node-1][curr_node-1]
+            current_influence += weight
+            
+        # 3. Identify My Action (bit -1)
         curr_value = binary[-1]
 
-        # Check if the assignment for each neighbor is possible given the current node's assignment
-        for j, neighbor in enumerate(neighbors):
-            if (binary[j], curr_value) not in G.nodes[neighbor]['dict'].keys():
+        # --- Check Best Response (Nash Condition) ---
+        # If influence >= threshold, I MUST play 1. If I play 0, it's invalid.
+        if current_influence >= node_threshold and curr_value == '0':
+            working_values = False
+        # If influence < threshold, I MUST play 0. If I play 1, it's invalid.
+        if current_influence < node_threshold and curr_value == '1':
+            working_values = False
+        
+        # 4. Check Consistency with Children's Dicts
+        for j, child in enumerate(neighbors):
+            child_action = binary[j]
+            # Look up in child's dict: Key is (ChildAction, ParentAction) -> (binary[j], curr_value)
+            if (child_action, curr_value) not in G.nodes[child]['dict'].keys():
                 working_values = False
 
-        # If this is a valid assignment, add it to the dict
+        # If valid, add to dict
         if working_values:
-            if (curr_value, prev_value) in node_dict.keys():
-                node_dict[(curr_value, prev_value)].add(tuple(binary[:-2]))
+            prev_value = binary[-2]
+            key = (curr_value, prev_value)
+            
+            if key in node_dict:
+                node_dict[key].add(tuple(binary[:-2]))
             else:
-                node_dict[(curr_value, prev_value)] = {tuple(binary[:-2])}
+                node_dict[key] = {tuple(binary[:-2])}
     
-    # Add the dict to the graph as an attribute of the current node.
     G.nodes[curr_node]['dict'] = node_dict
 
-def downstream_root(G, threshold, curr_node):
+def downstream_root(G, curr_node):
     """
-    Recursively perform the downsteam pass of TreeNash, assuming that this node is the root.
-    Add the dictionary of possible values as an attribute of the root in the graph.
+    Recursively perform the downstream pass for the Root.
     """
-
     node_dict = {}
     neighbors = list(G.neighbors(curr_node))
-    node_threshold = threshold * len(neighbors)
+    node_threshold = G.nodes[curr_node]['threshold']
 
     for neighbor in neighbors:
-        # Recurse on all neighbors
-        downstream(G, threshold, neighbor, curr_node)
+        downstream(G, neighbor, curr_node)
 
+    # Binary string length = len(children) + 1 (self)
     for i in range(2**(len(neighbors)+1)):
-        # Try all possible assignments for the node and all its neighbors, given by a binary string
-        # Where each digit corresponds to a node's assignment
         binary = f"{i:0{len(neighbors)+1}b}"
         working_values = True
-        digit_sum = 0
-
-        # Ignore the assignment if the current node isn't playing its best response.
-        for digit in binary[:-1]:
-            digit_sum += int(digit)
-        if digit_sum >= node_threshold and binary[-1] == '0':
-            working_values = False
-        if digit_sum < node_threshold and binary[-1] == '1':
-            working_values = False
         
-        # The current string's assignment is the last in the string
+        # --- Calculate Weighted Influence ---
+        current_influence = 0.0
+        
+        for j, child in enumerate(neighbors):
+            if binary[j] == '1':
+                weight = matrix[child-1][curr_node-1]
+                current_influence += weight
+
         curr_value = binary[-1]
 
-        # Check if the assignment for each neighbor is possible given the current node's assignment
-        for j, neighbor in enumerate(neighbors):
-            if (binary[j], curr_value) not in G.nodes[neighbor]['dict'].keys():
+        # --- Check Best Response ---
+        if current_influence >= node_threshold and curr_value == '0':
+            working_values = False
+        if current_influence < node_threshold and curr_value == '1':
+            working_values = False
+        
+        # Check Children Consistency
+        for j, child in enumerate(neighbors):
+            child_action = binary[j]
+            if (child_action, curr_value) not in G.nodes[child]['dict'].keys():
                 working_values = False
 
-        # If this is a valid assignment, add it to the dict
         if working_values:
-            if (curr_value) in node_dict.keys():
-                node_dict[(curr_value)].add(tuple(binary[:-1]))
+            key = (curr_value)
+            if key in node_dict:
+                node_dict[key].add(tuple(binary[:-1]))
             else:
-                node_dict[(curr_value)] = {tuple(binary[:-1])}
+                node_dict[key] = {tuple(binary[:-1])}
 
-    # Add the dict to the graph as an attribute of the root.
     G.nodes[curr_node]['dict'] = node_dict
 
 def upstream_traversal(G, curr_node, prev_node, curr_action, prev_action):
-    """
-    Recursively reconstructs the full game states from the witness lists.
-    Returns a list of dictioanries partial Nash Equilibria.
-    """
+    # This logic remains unchanged from your original solution
     solutions = []
-    if prev_node is None: #if were at root don't need a previous action
+    if prev_node is None: 
         key = str(curr_action)
     else:
         key = (str(curr_action), str(prev_action))
 
-    if key not in G.nodes[curr_node]['dict']: #if there are no chlidren that can play the current action
+    if key not in G.nodes[curr_node]['dict']: 
         return []
     
     valid_children_tuples = G.nodes[curr_node]['dict'][key]
     children = [n for n in G.neighbors(curr_node) if n != prev_node]
 
-    for child_config in valid_children_tuples: #tupels represents a valid configuration of children
+    for child_config in valid_children_tuples: 
         branch_solutions = [{curr_node: curr_action}]
 
-        for i, child in enumerate(children): #each child as an action
+        for i, child in enumerate(children): 
             child_action = int(child_config[i])
             child_sub_solutions = upstream_traversal(G, child, curr_node, child_action, curr_action)
             
-            if not child_sub_solutions: #no valid solutions for this child
+            if not child_sub_solutions: 
                 branch_solutions = []
                 break
 
             new_branch_solutions = []
 
-            for existing_sol in branch_solutions: #each existing solution
-                
-                for child_sol in child_sub_solutions: #each valid solution for the child
+            for existing_sol in branch_solutions: 
+                for child_sol in child_sub_solutions: 
                     merged = existing_sol.copy()
                     merged.update(child_sol)
                     new_branch_solutions.append(merged)
             branch_solutions = new_branch_solutions
         
-        solutions.extend(branch_solutions) #add all valid solutiosn for this branch
+        solutions.extend(branch_solutions) 
 
     return solutions
 
@@ -169,20 +234,33 @@ def solve_nash(graph):
         
     return final_equilibria
 
+# ---------------------------------------------------------
+# 3. MAIN
+# ---------------------------------------------------------
 def main(file):
-    graph, threshold = parse(file)
-    print(list(graph.neighbors(1)))
+    # 1. Use Professor's Parser to fill globals
+    print(f"Reading {file}...")
+    get_input(file)
+    
+    # 2. Convert globals to NetworkX Graph
+    graph = convert_to_networkx()
+    print(f"Nodes: {graph.nodes()}")
+    
+    # 3. Run Your Original Algorithm (Weighted Version)
     root = 1
-    downstream_root(graph, threshold, root)
-    for node in graph:
-        print(node)
-        print(graph.nodes[node]['dict'])
+    
+    print("Running Downstream...")
+    downstream_root(graph, root)
+    
+    print("Running Upstream...")
     equilibria = solve_nash(graph)
-    print(f"Found {len(equilibria)} Nash Equilibria:")
+    
+    print(f"\nFound {len(equilibria)} Nash Equilibria:")
     for i, eq in enumerate(equilibria):
         print(f"Eq {i+1}: {dict(sorted(eq.items()))}")
 
-if __name__ == "__main__": #try with input_test.txt for a smaller one and second_test.txt for a larger more compelx tree
-    main(sys.argv[1])
-
-
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python goonNash_Influence_Final.py <tree_game.txt>")
+    else:
+        main(sys.argv[1])
